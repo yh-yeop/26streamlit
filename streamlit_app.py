@@ -1,11 +1,20 @@
-import streamlit as st
+import pygame
 import numpy as np
 import random
+import sys
 
-# -------------------------
+# -------------------
 # 설정
-# -------------------------
-SIZE = 10
+# -------------------
+CELL = 40
+GRID_SIZE = 10
+WIDTH = CELL * GRID_SIZE
+HEIGHT = CELL * GRID_SIZE + 150
+
+WHITE = (240, 240, 240)
+BLACK = (30, 30, 30)
+GRAY = (100, 100, 100)
+BLUE = (80, 180, 255)
 
 BLOCKS = [
     np.array([[1]]),
@@ -14,116 +23,127 @@ BLOCKS = [
     np.array([[1, 1],
               [1, 1]]),
     np.array([[1, 1, 1],
-              [0, 1, 0]]),
+              [0, 1, 0]])
 ]
 
-# -------------------------
-# 초기 상태
-# -------------------------
-if "grid" not in st.session_state:
-    st.session_state.grid = np.zeros((SIZE, SIZE), dtype=int)
+# -------------------
+# 초기화
+# -------------------
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+clock = pygame.time.Clock()
 
-if "score" not in st.session_state:
-    st.session_state.score = 0
+grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=int)
 
-if "blocks" not in st.session_state:
-    st.session_state.blocks = [random.choice(BLOCKS) for _ in range(3)]
+score = 0
+selected_block = None
+blocks = [random.choice(BLOCKS) for _ in range(3)]
 
-if "selected" not in st.session_state:
-    st.session_state.selected = 0
-
-# -------------------------
+# -------------------
 # 함수
-# -------------------------
+# -------------------
 def can_place(grid, block, x, y):
     h, w = block.shape
-    if x + h > SIZE or y + w > SIZE:
+    if x + h > GRID_SIZE or y + w > GRID_SIZE:
         return False
     return np.all(grid[x:x+h, y:y+w] + block <= 1)
 
-def place_block(grid, block, x, y):
+def place(grid, block, x, y):
     h, w = block.shape
     grid[x:x+h, y:y+w] += block
     return grid
 
 def clear_lines(grid):
-    score = 0
+    global score
 
-    # 행 체크
-    for i in range(SIZE):
+    for i in range(GRID_SIZE):
         if np.all(grid[i, :] == 1):
             grid[i, :] = 0
             score += 10
 
-    # 열 체크
-    for j in range(SIZE):
+    for j in range(GRID_SIZE):
         if np.all(grid[:, j] == 1):
             grid[:, j] = 0
             score += 10
 
-    return grid, score
+    return grid
 
-def game_over(grid, blocks):
+def draw_grid():
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            rect = pygame.Rect(j*CELL, i*CELL, CELL, CELL)
+            color = BLUE if grid[i][j] else WHITE
+            pygame.draw.rect(screen, color, rect)
+            pygame.draw.rect(screen, GRAY, rect, 1)
+
+def draw_blocks():
+    for idx, b in enumerate(blocks):
+        for i in range(b.shape[0]):
+            for j in range(b.shape[1]):
+                if b[i][j]:
+                    x = j * 20 + idx * 120 + 20
+                    y = GRID_SIZE * CELL + i * 20 + 20
+                    pygame.draw.rect(screen, BLUE, (x, y, 18, 18))
+
+def game_over():
     for b in blocks:
-        for i in range(SIZE):
-            for j in range(SIZE):
+        for i in range(GRID_SIZE):
+            for j in range(GRID_SIZE):
                 if can_place(grid, b, i, j):
                     return False
     return True
 
-# -------------------------
-# UI
-# -------------------------
-st.title("🧩 Block Blast (Streamlit)")
+# -------------------
+# 메인 루프
+# -------------------
+running = True
+while running:
+    screen.fill(BLACK)
 
-st.write(f"⭐ Score: {st.session_state.score}")
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
 
-# -------------------------
-# 블록 선택
-# -------------------------
-cols = st.columns(3)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            mx, my = pygame.mouse.get_pos()
 
-for i in range(3):
-    with cols[i]:
-        st.write(f"Block {i}")
-        st.write(st.session_state.blocks[i])
+            grid_x = my // CELL
+            grid_y = mx // CELL
 
-        if st.button(f"Select {i}"):
-            st.session_state.selected = i
+            if 0 <= grid_x < GRID_SIZE and 0 <= grid_y < GRID_SIZE:
+                if selected_block is not None:
+                    block = blocks[selected_block]
 
-# -------------------------
-# 보드 클릭 입력
-# -------------------------
-st.write("### Board (click cell)")
+                    if can_place(grid, block, grid_x, grid_y):
+                        grid = place(grid, block, grid_x, grid_y)
+                        grid = clear_lines(grid)
 
-grid = st.session_state.grid
-selected_block = st.session_state.blocks[st.session_state.selected]
+                        blocks[selected_block] = random.choice(BLOCKS)
 
-for i in range(SIZE):
-    cols = st.columns(SIZE)
-    for j in range(SIZE):
-        cell = grid[i, j]
+    # 키 입력 (블록 선택)
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_1]:
+        selected_block = 0
+    if keys[pygame.K_2]:
+        selected_block = 1
+    if keys[pygame.K_3]:
+        selected_block = 2
 
-        label = "⬛" if cell == 0 else "🟩"
+    draw_grid()
+    draw_blocks()
 
-        if cols[j].button(label, key=f"{i}-{j}"):
-            if can_place(grid, selected_block, i, j):
-                grid = place_block(grid, selected_block, i, j)
+    # 점수 표시
+    font = pygame.font.SysFont(None, 36)
+    text = font.render(f"Score: {score}", True, WHITE)
+    screen.blit(text, (10, HEIGHT - 40))
 
-                grid, gained = clear_lines(grid)
-                st.session_state.score += gained
+    # 게임 오버
+    if game_over():
+        over = font.render("GAME OVER", True, (255, 100, 100))
+        screen.blit(over, (WIDTH//2 - 80, HEIGHT//2))
 
-                # 블록 교체
-                st.session_state.blocks[st.session_state.selected] = random.choice(BLOCKS)
+    pygame.display.flip()
+    clock.tick(60)
 
-                st.session_state.grid = grid
-
-# -------------------------
-# 게임 오버
-# -------------------------
-if game_over(st.session_state.grid, st.session_state.blocks):
-    st.error("💀 Game Over")
-    if st.button("Restart"):
-        st.session_state.grid = np.zeros((SIZE, SIZE), dtype=int)
-        st.session_state.score = 0
-        st.session_state.blocks = [random.choice(BLOCKS) for _ in range(3)]
+pygame.quit()
+sys.exit()
