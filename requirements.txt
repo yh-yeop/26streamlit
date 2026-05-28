@@ -1,3 +1,4 @@
 streamlit
 matplotlib
 pygame
+streamlit_keyup

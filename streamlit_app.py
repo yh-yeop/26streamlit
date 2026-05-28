@@ -1,110 +1,91 @@
 import streamlit as st
+from streamlit_keyup import st_keyup
 import pygame
 import numpy as np
-import time
 
-# -------------------
-# 초기 설정
-# -------------------
+# -------------------------
+# 설정
+# -------------------------
+WIDTH, HEIGHT = 800, 400
+GROUND = 320
 
-WIDTH = 800
-HEIGHT = 400
+GRAVITY = 0.8
+JUMP_POWER = -14
+MOVE_SPEED = 6
 
-GRAVITY = 0.7
-JUMP_POWER = -12
-MOVE_SPEED = 5
-
-# -------------------
-# 상태 저장
-# -------------------
-
+# -------------------------
+# 상태
+# -------------------------
 if "x" not in st.session_state:
     st.session_state.x = 100
 
 if "y" not in st.session_state:
-    st.session_state.y = 300
+    st.session_state.y = GROUND
 
 if "vy" not in st.session_state:
     st.session_state.vy = 0
 
-if "jumping" not in st.session_state:
-    st.session_state.jumping = False
+if "on_ground" not in st.session_state:
+    st.session_state.on_ground = True
 
-# -------------------
-# 입력
-# -------------------
+# -------------------------
+# 키 입력 (핵심)
+# -------------------------
+key = st_keyup("키 입력 (← → ↑ or A/D/W)")
 
-st.title("🕹️ Streamlit Mini Platformer")
-
-col1, col2, col3 = st.columns(3)
-
-left = col1.button("⬅️ Left")
-jump = col2.button("⬆️ Jump")
-right = col3.button("➡️ Right")
-
-# -------------------
-# 이동 처리
-# -------------------
-
-if left:
+# -------------------------
+# 입력 처리
+# -------------------------
+if key in ["ArrowLeft", "a", "A"]:
     st.session_state.x -= MOVE_SPEED
 
-if right:
+if key in ["ArrowRight", "d", "D"]:
     st.session_state.x += MOVE_SPEED
 
-# 점프
-if jump and not st.session_state.jumping:
-    st.session_state.vy = JUMP_POWER
-    st.session_state.jumping = True
+if key in ["ArrowUp", "w", "W", " "]:
+    if st.session_state.on_ground:
+        st.session_state.vy = JUMP_POWER
+        st.session_state.on_ground = False
 
-# -------------------
-# 물리 처리
-# -------------------
-
+# -------------------------
+# 물리
+# -------------------------
 st.session_state.vy += GRAVITY
 st.session_state.y += st.session_state.vy
-
-# 바닥 충돌
-GROUND = 300
 
 if st.session_state.y >= GROUND:
     st.session_state.y = GROUND
     st.session_state.vy = 0
-    st.session_state.jumping = False
+    st.session_state.on_ground = True
 
-# -------------------
-# pygame 렌더링
-# -------------------
-
+# -------------------------
+# 렌더링 (pygame surface)
+# -------------------------
 pygame.init()
-
 surface = pygame.Surface((WIDTH, HEIGHT))
 
-# 배경
-surface.fill((30, 30, 40))
+surface.fill((20, 20, 30))
 
 # 바닥
-pygame.draw.rect(surface, (100, 200, 100), (0, 350, WIDTH, 50))
+pygame.draw.rect(surface, (80, 200, 120), (0, GROUND + 50, WIDTH, 80))
 
 # 플레이어
 pygame.draw.rect(
     surface,
-    (50, 200, 255),
-    (
-        st.session_state.x,
-        st.session_state.y,
-        50,
-        50
-    )
+    (80, 180, 255),
+    (st.session_state.x, st.session_state.y, 40, 40)
 )
 
-# numpy 변환
+# 변환
 frame = pygame.surfarray.array3d(surface)
 frame = np.transpose(frame, (1, 0, 2))
 
-# 출력
 st.image(frame)
 
-# 좌표 표시
-st.write(f"X: {st.session_state.x}")
-st.write(f"Y: {st.session_state.y:.1f}")
+# 상태
+st.write("입력된 키:", key)
+st.write({
+    "x": st.session_state.x,
+    "y": st.session_state.y,
+    "vy": st.session_state.vy
+})
