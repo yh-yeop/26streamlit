@@ -32,6 +32,9 @@ if "blocks" not in st.session_state:
 if "selected" not in st.session_state:
     st.session_state.selected = 0
 
+if "last_action" not in st.session_state:
+    st.session_state.last_action = None
+
 
 # -----------------------
 # 로직
@@ -65,23 +68,19 @@ def clear_lines(grid):
     return grid, score
 
 
-def game_over(grid, blocks):
-    for b in blocks:
-        for i in range(N):
-            for j in range(N):
-                if can_place(grid, b, i, j):
-                    return False
-    return True
+def new_blocks():
+    return [random.choice(BLOCKS) for _ in range(3)]
 
 
 # -----------------------
 # UI
 # -----------------------
-st.title("🧩 Block Blast PRO (Streamlit Edition)")
+st.title("🧩 Block Blast UX+ (Streamlit)")
+
 st.write(f"⭐ Score: {st.session_state.score}")
 
 # -----------------------
-# 블록 선택 UI
+# 블록 선택
 # -----------------------
 cols = st.columns(3)
 
@@ -89,7 +88,6 @@ for i in range(3):
     with cols[i]:
         st.write(f"Block {i}")
 
-        # 블록 미리보기 (예쁘게)
         b = st.session_state.blocks[i]
         preview = ""
         for r in b:
@@ -104,62 +102,65 @@ for i in range(3):
 
 
 # -----------------------
-# 클릭 좌표 선택 방식 (핵심)
+# 좌표 선택 (shadow 핵심)
 # -----------------------
-st.subheader("🎯 Place Block")
+st.subheader("🎯 Placement Preview")
 
 row = st.selectbox("Row", list(range(N)))
 col = st.selectbox("Col", list(range(N)))
 
-if st.button("Place"):
-    grid = st.session_state.grid
-    block = st.session_state.blocks[st.session_state.selected]
+grid = st.session_state.grid
+block = st.session_state.blocks[st.session_state.selected]
 
-    if can_place(grid, block, row, col):
-        grid = place(grid, block, row, col)
+valid = can_place(grid, block, row, col)
 
-        grid, gain = clear_lines(grid)
-        st.session_state.score += gain
+st.write("Preview:")
 
-        st.session_state.blocks[st.session_state.selected] = random.choice(BLOCKS)
+# shadow grid 생성
+shadow = grid.copy()
 
-        st.session_state.grid = grid
+for i in range(block.shape[0]):
+    for j in range(block.shape[1]):
+        x = row + i
+        y = col + j
+        if x < N and y < N:
+            shadow[x][y] = 2 if valid else 3  # 2 = valid shadow, 3 = invalid shadow
 
 
 # -----------------------
-# 보드 UI (핵심: HTML로 렌더링)
+# 렌더 (CSS 개선)
 # -----------------------
-st.subheader("🧱 Board")
-
 html = """
 <style>
 .board {
     display: grid;
-    grid-template-columns: repeat(10, 25px);
+    grid-template-columns: repeat(10, 26px);
     gap: 2px;
 }
 .cell {
-    width: 25px;
-    height: 25px;
+    width: 26px;
+    height: 26px;
     border-radius: 4px;
 }
-.filled {
-    background: #4fc3f7;
-}
-.empty {
-    background: #2b2b2b;
-}
+.empty { background: #2b2b2b; }
+.filled { background: #4fc3f7; }
+.shadow_ok { background: #ff6b6b; opacity: 0.4; }
+.shadow_bad { background: #b00020; opacity: 0.4; }
 </style>
 
 <div class="board">
 """
 
-grid = st.session_state.grid
-
 for i in range(N):
     for j in range(N):
-        if grid[i][j]:
+        v = shadow[i][j]
+
+        if v == 1:
             html += '<div class="cell filled"></div>'
+        elif v == 2:
+            html += '<div class="cell shadow_ok"></div>'
+        elif v == 3:
+            html += '<div class="cell shadow_bad"></div>'
         else:
             html += '<div class="cell empty"></div>'
 
@@ -169,11 +170,41 @@ st.markdown(html, unsafe_allow_html=True)
 
 
 # -----------------------
+# Place 버튼 (핵심 UX)
+# -----------------------
+if st.button("🟢 PLACE BLOCK"):
+    if valid:
+        grid = place(grid, block, row, col)
+        grid, gain = clear_lines(grid)
+
+        st.session_state.grid = grid
+        st.session_state.score += gain
+
+        # 🔥 핵심: 블록 자동 새로고침
+        st.session_state.blocks[st.session_state.selected] = random.choice(BLOCKS)
+
+        st.session_state.last_action = "placed"
+        st.rerun()
+    else:
+        st.warning("❌ Cannot place block here")
+
+
+# -----------------------
 # 게임 오버
 # -----------------------
+def game_over(grid, blocks):
+    for b in blocks:
+        for i in range(N):
+            for j in range(N):
+                if can_place(grid, b, i, j):
+                    return False
+    return True
+
+
 if game_over(st.session_state.grid, st.session_state.blocks):
     st.error("💀 GAME OVER")
     if st.button("Restart"):
-        st.session_state.grid = np.zeros((N, N))
+        st.session_state.grid = np.zeros((N, N), dtype=int)
         st.session_state.score = 0
-        st.session_state.blocks = [random.choice(BLOCKS) for _ in range(3)]
+        st.session_state.blocks = new_blocks()
+        st.rerun()
